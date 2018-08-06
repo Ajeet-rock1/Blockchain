@@ -1,0 +1,36 @@
+{% for Org in Orgs %}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress
+  namespace: {{Org.namespace}}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+   {% if isPeer %}
+      - path: /fabric/{{Org.cluster.lower()}}/{{Org.name.lower()}}/ca
+        backend:
+          serviceName: ca
+          servicePort: 7054
+   {% endif %}
+   {% for i in range(Org.count) %}
+      {% if isPeer %}
+      - path: /fabric/{{Org.cluster.lower()}}/{{Org.name.lower()}}/peer{{i}}
+        backend:
+           serviceName: peer{{i}}
+           servicePort: 7051
+      {% else %}
+      - path: /fabric/{{Org.cluster.lower()}}/{{Org.name.lower()}}/orderer{{i}}
+        backend:
+            serviceName: orderer{{i}}
+            servicePort: 7050
+      {% endif %}
+   {% endfor %}
+
+{% endfor %}
+
+

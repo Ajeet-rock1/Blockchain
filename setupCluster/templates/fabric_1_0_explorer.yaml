@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+    name: explorer-{{clusterName}}
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+    name: explorer-{{clusterName}}-pv
+spec:
+    capacity:
+      storage: 500Mi
+    claimRef:
+      namespace: explorer-{{clusterName}}
+      name: explorer-{{clusterName}}-pvc
+    accessModes:
+       - ReadWriteMany
+    nfs:
+      path: {{nfsExportDir}}/{{clusterName}}/resources/
+      server: {{nfsIp}} # change to your nfs server ip here.
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    namespace: explorer-{{clusterName}}
+    name: explorer-{{clusterName}}-pvc
+spec:
+   accessModes:
+     - ReadWriteMany
+   resources:
+      requests:
+        storage: 10Mi
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+   namespace: explorer-{{clusterName}}
+   name: fabric-explorer-{{clusterName}}
+spec:
+  replicas: 1
+  strategy: {}
+  template:
+    metadata:
+      labels:
+       app: explorer
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:5.7
+          ports:
+            - containerPort: 3306
+          env:
+          - name: MYSQL_ROOT_PASSWORD
+            value: root
+          - name: MYSQL_DATABASE
+            value: fabricexplorer
+          volumeMounts:
+           - mountPath: /docker-entrypoint-initdb.d/fabricexplorer.sql
+             name: explorer-resources-{{clusterName}}
+             subPath: explorer-artifacts/fabricexplorer.sql
+
+        - name: fabric-explorer
+          imagePullPolicy: IfNotPresent
+          # There is no official fabric-explorer image. Use this image instead.
+          # Check https://github.com/yeasy/docker-compose-files/blob/master/hyperledger_fabric/v1.1.0/base.yaml#L141
+          image: yeasy/blockchain-explorer:0.1.0-preview
+          command: [ "/bin/bash", "-c", "--" ]
+          args: ["sleep 10;node main.js 2>&1"]
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+           - mountPath: /blockchain-explorer/config.json
+             name: explorer-resources-{{clusterName}}
+             subPath: explorer-artifacts/config.json
+           - mountPath: /blockchain-explorer/first-network/crypto-config
+             name: explorer-resources-{{clusterName}}
+             subPath: crypto-config
+      volumes:
+        - name: explorer-resources-{{clusterName}}
+          persistentVolumeClaim:
+              claimName: explorer-{{clusterName}}-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+   namespace: explorer-{{clusterName}}
+   name: fabric-explorer-{{clusterName}}
+spec:
+   selector:
+       app: explorer
+   ports:
+      - name: explorer-{{clusterName}}-server
+        protocol: TCP
+        port: 8080
+        targetPort: 8080
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: explorer-ingress
+  namespace: explorer-{{clusterName}}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/add-base-url: "true"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /fabric/{{clusterName}}/explorer
+        backend:
+          serviceName: fabric-explorer-{{clusterName}}
+          servicePort: 8080
