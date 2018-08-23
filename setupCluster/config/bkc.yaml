@@ -13,11 +13,11 @@ dockerdSockDir: /var/run
 fabricPortStartFrom: 30000
 
 # NFS server configurations   
-nfsServer:
+nfsServer: 10.160.0.5
   # FQDN of IP of NFS Server 
-  hostname:  
+  hostname: nfs
   # The path of NFS export dir
-  exportDir: 
+  exportDir: /opt/share
   # The local mount point for remote NFS Server
   mountPoint: /mnt/nfs
 
